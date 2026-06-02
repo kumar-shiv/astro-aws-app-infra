@@ -54,6 +54,12 @@ This project provisions a complete AWS infrastructure featuring:
              └────────────────────────────────────┘
 ```
 
+## Detailed Architecture
+
+We use AWS ECS Fargate and RDS to run our SLM application securely. 
+
+[👉 Click here to view the full Architecture Diagram](architecture.md)
+
 ## Prerequisites
 
 - **Terraform**: v1.0 or later ([install](https://learn.hashicorp.com/tutorials/terraform/install-cli))
