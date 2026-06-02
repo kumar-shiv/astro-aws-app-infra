@@ -1,60 +1,65 @@
 ```mermaid
-architecture-beta
-    group aws(cloud)[AWS Cloud]
-    
-    service s3_raw(disk)[S3 Bucket: raw] in aws
-    service s3_out(disk)[S3 Bucket: output] in aws
-    service s3_wiki(disk)[S3 Bucket: wiki] in aws
+flowchart TB
+  %% Styling definitions for a cleaner look
+  classDef aws fill:#FF9900,stroke:#232F3E,stroke-width:2px,color:#232F3E;
+  classDef vpc fill:#00A4A6,stroke:#232F3E,stroke-width:2px,color:white;
+  classDef subnet fill:#1366b5,stroke:#232F3E,stroke-width:1px,color:white;
+  classDef s3 fill:#3F8624,stroke:#232F3E,stroke-width:2px,color:white;
+  classDef db fill:#3367d6,stroke:#232F3E,stroke-width:2px,color:white;
 
-    group vpc(cloud)[VPC 10.0.0.0/16] in aws
-    service igw(internet)[Internet Gateway] in vpc
-    
-    group endpoints(server)[VPC Endpoints] in vpc
-    service s3_gw(network)[S3 Gateway Endpoint] in endpoints
-    service ecr_ep(network)[ECR & Logs Endpoints] in endpoints
+  Users((Internet Users))
 
-    group az1(cloud)[Availability Zone 1] in vpc
-    group az2(cloud)[Availability Zone 2] in vpc
+  subgraph AWS ["AWS Cloud"]
+    subgraph VPC ["VPC (10.0.0.0/16)"]
+      IGW{"Internet Gateway"}
+      
+      subgraph AZ1 ["Availability Zone 1"]
+        NAT1["NAT Gateway 1"]:::subnet
+        Front1["Frontend Subnet 1"]:::subnet
+        App1["App Subnet 1"]:::subnet
+        LLM1["Ollama Fargate 1"]:::subnet
+        DB1[("RDS Primary")]:::db
+      end
+      
+      subgraph AZ2 ["Availability Zone 2"]
+        NAT2["NAT Gateway 2"]:::subnet
+        Front2["Frontend Subnet 2"]:::subnet
+        App2["App Subnet 2"]:::subnet
+        LLM2["Ollama Fargate 2"]:::subnet
+        DB2[("RDS Standby")]:::db
+      end
+      
+      subgraph Endpoints ["VPC Endpoints"]
+        S3GW{{"S3 Gateway Endpoint"}}
+        ECREP{{"ECR & Logs Endpoints"}}
+      end
+    end
 
-    %% AZ 1 Subnets
-    service nat1(server)[NAT Gateway 1] in az1
-    service front1(server)[Frontend Subnet 1] in az1
-    service app1(server)[App Subnet 1] in az1
-    service llm1(server)[Ollama Fargate 1] in az1
-    service db1(database)[RDS Postgres Primary] in az1
+    subgraph S3 ["Amazon S3"]
+      S3Raw[("raw bucket")]:::s3
+      S3Out[("output bucket")]:::s3
+      S3Wiki[("wiki bucket")]:::s3
+    end
+  end
 
-    %% AZ 2 Subnets
-    service nat2(server)[NAT Gateway 2] in az2
-    service front2(server)[Frontend Subnet 2] in az2
-    service app2(server)[App Subnet 2] in az2
-    service llm2(server)[Ollama Fargate 2] in az2
-    service db2(database)[RDS Postgres Standby] in az2
+  %% External traffic
+  Users <--> IGW
+  IGW <--> Front1 & Front2
 
-    %% External
-    service user(internet)[Internet Users]
+  %% Internal traffic AZ1
+  Front1 <--> App1
+  App1 --> LLM1 & DB1
+  LLM1 --> NAT1
+  NAT1 --> IGW
 
-    %% Connections
-    user:R --> L:igw
-    igw:R --> L:front1
-    igw:R --> L:front2
-    
-    front1:B --> T:app1
-    front2:B --> T:app2
-    
-    app1:B --> T:llm1
-    app2:B --> T:llm2
-    
-    app1:B --> T:db1
-    app2:B --> T:db2
-    
-    db1:R --> L:db2
+  %% Internal traffic AZ2
+  Front2 <--> App2
+  App2 --> LLM2 & DB2
+  LLM2 --> NAT2
+  NAT2 --> IGW
 
-    app1:R --> L:s3_gw
-    app2:R --> L:s3_gw
-    
-    s3_gw:R --> L:s3_raw
-    s3_gw:R --> L:s3_out
-    
-    llm1:L --> R:nat1
-    llm2:L --> R:nat2
+  %% Cross AZ / Endpoints
+  DB1 -. Sync .-> DB2
+  App1 & App2 --> S3GW
+  S3GW --> S3Raw & S3Out & S3Wiki
 ```
