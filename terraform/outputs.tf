@@ -1,3 +1,45 @@
+# Dev EC2 Outputs
+output "dev_ec2_instance_id" {
+  description = "Dev EC2 instance ID"
+  value       = var.enable_dev_ec2 ? module.ec2_dev[0].instance_id : null
+}
+
+output "dev_ec2_public_ip" {
+  description = "Dev EC2 Elastic IP (stable across stop/start)"
+  value       = var.enable_dev_ec2 ? module.ec2_dev[0].public_ip : null
+}
+
+output "dev_ssh_command" {
+  description = "SSH command to connect to dev EC2"
+  value       = var.enable_dev_ec2 ? module.ec2_dev[0].ssh_command : null
+}
+
+output "dev_tunnel_command" {
+  description = "SSH tunnel command — run before invoking Python scripts locally"
+  value       = var.enable_dev_ec2 ? module.ec2_dev[0].tunnel_command : null
+}
+
+output "dev_model_check" {
+  description = "Command to verify both Ollama models are ready"
+  value       = var.enable_dev_ec2 ? module.ec2_dev[0].model_check_command : null
+}
+
+output "dev_bootstrap_log" {
+  description = "Command to tail bootstrap log (model pull progress)"
+  value       = var.enable_dev_ec2 ? module.ec2_dev[0].user_data_log : null
+}
+
+# S3 bucket names (needed for Python env vars)
+output "raw_bucket_name" {
+  description = "S3 raw bucket name — set as S3_INPUT_BUCKET env var"
+  value       = module.s3.raw_bucket_name
+}
+
+output "output_bucket_name" {
+  description = "S3 output bucket name — set as S3_OUTPUT_BUCKET env var"
+  value       = module.s3.output_bucket_name
+}
+
 # VPC Outputs
 output "vpc_id" {
   description = "VPC ID"

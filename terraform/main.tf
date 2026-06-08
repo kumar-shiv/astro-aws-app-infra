@@ -98,20 +98,22 @@ module "vpc_endpoints" {
 }
 
 # S3 Module
+# vpc_id is used only for bucket policy conditions (extra Allow, not a Deny).
+# EC2/ECS access is controlled by IAM roles — S3 works regardless of this value.
+# For dev: set s3_vpc_id to your default VPC ID in terraform.tfvars.
+# For prod: set s3_vpc_id to the custom VPC ID after the vpc module is applied.
 module "s3" {
   source = "./modules/s3"
 
   bucket_names             = var.s3_bucket_names
   enable_versioning        = var.s3_enable_versioning
   enable_encryption        = var.s3_enable_encryption
-  vpc_id                   = module.vpc.vpc_id
+  vpc_id                   = var.s3_vpc_id
   app_subnet_cidr_blocks   = var.app_subnet_cidrs
   project_name             = var.project_name
   environment              = var.environment
 
   tags = local.merged_tags
-
-  depends_on = [module.vpc]
 }
 
 # RDS Module
@@ -160,6 +162,27 @@ module "ecs_cluster" {
   environment  = var.environment
 
   tags = local.merged_tags
+}
+
+# Dev EC2 Module — local Python + SSH tunnel workflow
+# Set enable_dev_ec2 = true in terraform.tfvars to create.
+# Destroy with: terraform destroy -target=module.ec2_dev
+module "ec2_dev" {
+  count  = var.enable_dev_ec2 ? 1 : 0
+  source = "./modules/ec2_dev"
+
+  project_name      = var.project_name
+  environment       = var.environment
+  instance_type     = var.dev_ec2_instance
+  key_name          = var.dev_ec2_key_name
+  ssh_public_key    = var.dev_ssh_public_key
+  ollama_model      = var.ollama_model
+  raw_bucket_arn    = module.s3.raw_bucket_arn
+  output_bucket_arn = module.s3.output_bucket_arn
+
+  tags = local.merged_tags
+
+  depends_on = [module.s3]
 }
 
 # Ollama Fargate Module

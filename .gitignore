@@ -1,3 +1,6 @@
+# Dev setup state (contains resource IDs, not secrets — but no need to commit)
+.dev-state
+
 # Terraform files
 .terraform/
 *.tfstate
