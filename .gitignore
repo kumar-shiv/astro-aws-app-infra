@@ -1,5 +1,7 @@
-# Dev setup state (contains resource IDs, not secrets — but no need to commit)
-.dev-state
+# Setup state files (contain resource IDs and DB credentials — never commit)
+scripts/.dev-state
+scripts/.mobile-review-state
+scripts/.staging-state
 
 # Terraform files
 .terraform/

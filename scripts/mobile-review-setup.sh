@@ -37,9 +37,7 @@ IMAGE_TAG="mobile-review"
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 err() { echo "[ERROR] $*" >&2; exit 1; }
 
-# Windows corporate SSL — suppress InsecureRequestWarning via Python env var
-# (process substitution is unreliable in Git Bash on Windows)
-aws() { PYTHONWARNINGS=ignore command aws --no-verify-ssl "$@"; }
+# SSL verification disabled globally via ~/.aws/config (cli_verify_ssl = false)
 
 # Secret key is NOT persisted — shown once at setup, must be copied to GitHub Secrets
 save_state() {
@@ -441,14 +439,28 @@ teardown() {
     fi
   fi
 
-  # ── ECR repository (--force deletes all images)
+  # ── ECR repository
+  # If a staging image exists in the repo, only remove the mobile-review tag
+  # so the shared repo and staging's image are left intact.
   if aws ecr describe-repositories --repository-names "${ECR_REPO_NAME}" --region "${REGION}" > /dev/null 2>&1; then
-    log "  Deleting ECR repository and all images..."
-    aws ecr delete-repository \
-      --repository-name "${ECR_REPO_NAME}" \
-      --force \
-      --region "${REGION}" > /dev/null
-    log "  ECR repository deleted"
+    if aws ecr describe-images \
+        --repository-name "${ECR_REPO_NAME}" \
+        --image-ids imageTag="staging" \
+        --region "${REGION}" > /dev/null 2>&1; then
+      log "  Staging image detected in ECR — removing mobile-review tag only (leaving repo)"
+      aws ecr batch-delete-image \
+        --repository-name "${ECR_REPO_NAME}" \
+        --image-ids imageTag="${IMAGE_TAG}" \
+        --region "${REGION}" > /dev/null 2>&1 || true
+      log "  mobile-review image removed"
+    else
+      log "  No other environments detected — deleting ECR repository"
+      aws ecr delete-repository \
+        --repository-name "${ECR_REPO_NAME}" \
+        --force \
+        --region "${REGION}" > /dev/null
+      log "  ECR repository deleted"
+    fi
   else
     log "  ECR repository not found — skipping"
   fi
@@ -472,15 +484,23 @@ teardown() {
     log "  IAM CI user not found — skipping"
   fi
 
-  # ── App Runner ECR role
+  # ── App Runner ECR role (shared with staging — skip if staging service exists)
   if aws iam get-role --role-name "${APP_RUNNER_ECR_ROLE_NAME}" > /dev/null 2>&1; then
-    log "  Deleting App Runner ECR role..."
-    aws iam detach-role-policy \
-      --role-name "${APP_RUNNER_ECR_ROLE_NAME}" \
-      --policy-arn arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess \
-      2>/dev/null || true
-    aws iam delete-role --role-name "${APP_RUNNER_ECR_ROLE_NAME}"
-    log "  App Runner ECR role deleted"
+    STAGING_ARN=$(aws apprunner list-services --region "${REGION}" \
+      --query "ServiceSummaryList[?ServiceName=='astro-webapp-staging'].ServiceArn" \
+      --output text 2>/dev/null || true)
+    if [[ -n "${STAGING_ARN}" && "${STAGING_ARN}" != "None" ]]; then
+      log "  Staging App Runner service detected — skipping ECR role deletion (role is shared)"
+      log "  Run ./staging_setup.sh teardown first, then re-run this teardown to remove the role."
+    else
+      log "  Deleting App Runner ECR role..."
+      aws iam detach-role-policy \
+        --role-name "${APP_RUNNER_ECR_ROLE_NAME}" \
+        --policy-arn arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess \
+        2>/dev/null || true
+      aws iam delete-role --role-name "${APP_RUNNER_ECR_ROLE_NAME}"
+      log "  App Runner ECR role deleted"
+    fi
   else
     log "  App Runner ECR role not found — skipping"
   fi
