@@ -21,7 +21,7 @@ STATE_FILE="${SCRIPT_DIR}/.dev-state"
 KEY_PATH="${HOME}/.ssh/astro-dev-key"
 KEY_NAME="astro-dev-key"
 REGION="us-east-1"
-INSTANCE_TYPE="m7g.xlarge"   # 4 vCPU / 16 GB — required for translategemma:latest
+INSTANCE_TYPE="m7g.2xlarge"  # 8 vCPU / 32 GB — required for gemma4 (9.6 GB) + 16K KV cache without swap
 ROOT_VOLUME_GB=30
 
 # ---------------------------------------------------------------------------
@@ -31,8 +31,7 @@ ROOT_VOLUME_GB=30
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 err() { echo "[ERROR] $*" >&2; exit 1; }
 
-# Windows corporate SSL — cli_verify_ssl config key is ignored in v1; wrap instead
-aws() { command aws --no-verify-ssl "$@" 2> >(grep -v InsecureRequestWarning >&2); }
+# SSL verification disabled globally via ~/.aws/config (cli_verify_ssl = false)
 
 # Write plain KEY=value pairs — declare -p produces `declare -- VAR=val` which
 # creates local variables when sourced inside a function, silently breaking
@@ -257,11 +256,12 @@ if ! ${READY}; then
   exit 1
 fi
 
-echo "=== Pulling translategemma:latest ==="
+echo "=== Pulling models (translategemma + gemma4) ==="
 export HOME=/root
 ollama pull translategemma:latest
+ollama pull gemma4:latest
 
-echo "=== Model ready ==="
+echo "=== Models ready ==="
 ollama list' \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=astro-app-dev-ec2},{Key=Project,Value=astro-app}]" \
     --region "${REGION}" \
@@ -365,10 +365,21 @@ print_summary() {
   echo "  PYTHONUTF8=1 \\"
   echo "    LLM_PROVIDER=ollama \\"
   echo "    OLLAMA_BASE_URL=http://localhost:11434 \\"
-  echo "    OLLAMA_MODEL=translategemma:latest \\"
+  echo "    OLLAMA_MODEL=gemma4:latest \\"
+  echo "    OLLAMA_TRANSLATE_MODEL=translategemma:latest \\"
   echo "    S3_INPUT_BUCKET=astro-app-prod-raw-${ACCOUNT_ID} \\"
   echo "    S3_OUTPUT_BUCKET=astro-app-prod-output-${ACCOUNT_ID} \\"
   echo "    python3 -m source.corpus.sourceaggregation.qna_transcript_processor --video-id <ID>"
+  echo ""
+  echo "── Livealone batch convert (all raw → JSONL) ───────────"
+  echo "  PYTHONUTF8=1 \\"
+  echo "    LLM_PROVIDER=ollama \\"
+  echo "    OLLAMA_BASE_URL=http://localhost:11434 \\"
+  echo "    OLLAMA_MODEL=gemma4:latest \\"
+  echo "    OLLAMA_TRANSLATE_MODEL=translategemma:latest \\"
+  echo "    python3 -m source.corpus.sourceaggregation.livealone_batch_converter"
+  echo "  # --dry-run   list pending without calling LLM"
+  echo "  # --status    show full progress table"
   echo ""
   echo "── Stop EC2 (keeps EIP and data; EIP costs ~\$0.005/hr while stopped) ──"
   echo "  aws ec2 stop-instances --instance-ids ${INSTANCE_ID} --region ${REGION}"
