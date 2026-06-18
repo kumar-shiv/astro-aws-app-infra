@@ -40,7 +40,7 @@ CI_USER_NAME="astro-app-staging-ci"
 
 # RDS
 DB_INSTANCE_ID="astro-webapp-staging-db"
-DB_NAME="astroweb_staging"
+DB_NAME="astrodb_staging"
 DB_USER="astroweb"
 DB_SUBNET_GROUP="astro-webapp-staging-db-subnet-group"
 
